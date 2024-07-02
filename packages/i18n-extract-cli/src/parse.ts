@@ -36,3 +36,34 @@ export function initParse(babelPresets: presetsType = [], babelPlugins: pluginsT
     })
   }
 }
+
+export function initParseSync(babelPresets: presetsType = [], babelPlugins: pluginsType = []) {
+  return function (code: string, opts: any) {
+    return babel.parseSync(code, {
+      ast: true,
+      configFile: false,
+      presets: babelPresets,
+      plugins: [
+        pluginSyntaxJSX,
+        pluginSyntaxProposalOptionalChaining,
+        pluginSyntaxClassProperties,
+        [pluginSyntaxDecorators, { decoratorsBeforeExport: true }],
+        pluginSyntaxObjectRestSpread,
+        pluginSyntaxAsyncGenerators,
+        pluginSyntaxDoExpressions,
+        pluginSyntaxDynamicImport,
+        pluginSyntaxExportExtensions,
+        pluginSyntaxFunctionBind,
+        ...babelPlugins,
+      ],
+      parserOpts: {
+        tokens: true, //令牌
+      }
+      // ...omit(
+      //   opts, 
+      //   'jsx', 'loc', 'locations', 'range', 'comment', 'onComment', 'tolerant', 'ecmaVersion'
+      // ),
+    })
+  }
+}
+

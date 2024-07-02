@@ -144,7 +144,7 @@ export default async function (
 
     const fileContent = spreadObject(newTargetLangPack)
     saveLocaleFile(fileContent, targetLocalePath)
-    log.info(`完成${targetLocale}语言包翻译`)
+    log.info(`完成${targetLocale}语言包翻译，请人工校验`)
   }
 }
 

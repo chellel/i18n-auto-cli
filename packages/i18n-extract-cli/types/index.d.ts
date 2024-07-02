@@ -11,7 +11,7 @@ export interface GlobalRule {
 
 export interface transformOptions {
   rule: Rule
-  parse: (code: string) => ParseResult
+  parse: any
   isJsInVue?: boolean
   filePath?: string
 }
@@ -79,6 +79,7 @@ export type TagOrder = Array<'template' | 'script' | 'style'>
 export type Config = {
   input: string
   output: string
+  localeFile: string
   localePath: string
   localeFileType: string
   locales: string[]

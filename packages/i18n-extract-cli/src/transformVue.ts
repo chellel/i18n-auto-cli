@@ -14,10 +14,14 @@ import type { Rule, TagOrder, transformOptions } from '../types'
 import { includeChinese } from './utils/includeChinese'
 import log from './utils/log'
 import transformJs from './transformJs'
-import { initParse } from './parse'
+import { initParse, initParseSync } from './parse'
 import Collector from './collector'
 import { IGNORE_REMARK } from './utils/constants'
 import StateManager from './utils/stateManager'
+const babel = require('@babel/core')
+
+type attrsCacheType = Record<string, string | undefined>;
+type attrsQuoteCacheType = Record<string, string | null | undefined>;
 
 const presetTypescript = require('@babel/preset-typescript')
 
@@ -112,7 +116,7 @@ function handleTemplate(code: string, rule: Rule): string {
     return `${functionNameInTemplate}('${translationKey}')`
   }
 
-  function parseIgnoredTagAttribute(attributes: Record<string, string | undefined>): string {
+  function parseIgnoredTagAttribute(attributes: attrsCacheType): string {
     let attrs = ''
     for (const key in attributes) {
       const attrValue = attributes[key]
@@ -125,23 +129,25 @@ function handleTemplate(code: string, rule: Rule): string {
     return attrs
   }
 
-  function parseTagAttribute(attributes: Record<string, string | undefined>): string {
-    let attrs = ''
+  function parseTagAttribute(attributes: attrsCacheType, attrsQuoteCache: attrsQuoteCacheType): string {
+    let attrs = []
     for (const key in attributes) {
       const attrValue = attributes[key]
+      const quote = attrsQuoteCache[key] || '"'
       const isVueDirective = key.startsWith(':') || key.startsWith('@') || key.startsWith('v-')
+      let attrItem = '';
       if (attrValue === undefined) {
-        attrs += ` ${key} `
+        attrItem = `${key}`
       } else if (includeChinese(attrValue) && isVueDirective) {
         const source = parseJsSyntax(attrValue, rule)
         // 处理属性类似于:xx="'xx'"，这种属性值不是js表达式的情况。attrValue === source即属性值不是js表达式
-        // !hasTransformed()是为了排除，类似:xx="$t('xx')"这种已经转化过的情况。这种情况不需要二次处理
+        // \!hasTransformed()是为了排除，类似:xx="$t('xx')"这种已经转化过的情况。这种情况不需要二次处理
         if (attrValue === source && !hasTransformed(source, functionNameInTemplate ?? '')) {
           const translationKey = Collector.add(removeQuotes(attrValue), customizeKey)
           const expression = getReplaceValue(translationKey)
-          attrs += ` ${key}="${expression}" `
+          attrItem = `${key}=${quote}${expression}${quote}`
         } else {
-          attrs += ` ${key}="${source}" `
+          attrItem = `${key}=${quote}${source}${quote}`
         }
       } else if (includeChinese(attrValue) && !isVueDirective) {
         const translationKey = Collector.add(attrValue, (key, path) => {
@@ -150,15 +156,16 @@ function handleTemplate(code: string, rule: Rule): string {
           return customizeKey(key, path)
         })
         const expression = getReplaceValue(translationKey)
-        attrs += ` :${key}="${expression}" `
+        attrItem = `:${key}=${quote}${expression}${quote}`
       } else if (attrValue === '') {
-        // 这里key=''是因为之后还会被pretttier处理一遍，所以写死单引号没什么影响
-        attrs += `${key}='' `
+        attrItem = `${key}`
       } else {
-        attrs += ` ${key}="${attrValue}" `
+        attrItem = `${key}=${quote}${attrValue}${quote}`
       }
+      attrs.push(attrItem)
     }
-    return attrs
+
+    return attrs.join(' ')
   }
 
   // 转义特殊字符
@@ -173,7 +180,8 @@ function handleTemplate(code: string, rule: Rule): string {
 
   let shouldIgnore = false // 是否忽略提取
   let textNodeCache = '' // 缓存当前文本节点内容
-  let attrsCache: Record<string, string | undefined> = {} // 缓存当前标签的属性
+  let attrsCache: attrsCacheType = {} // 缓存当前标签的属性
+  let attrsQuoteCache: attrsQuoteCacheType = {} // 缓存当前标签对应的引号（单引号/双引号）
   const ignoreTags: string[] = [] // 记录忽略提取的标签名
   const parser = new htmlparser2.Parser(
     {
@@ -197,13 +205,15 @@ function handleTemplate(code: string, rule: Rule): string {
           return
         }
 
-        attrs = parseTagAttribute(attributes)
+        attrs = parseTagAttribute(attributes, attrsQuoteCache)
         // 重置属性缓存
         attrsCache = {}
+        attrsQuoteCache = {}
         htmlString += `<${tagName} ${attrs}>`
       },
 
       onattribute(name, value, quote) {
+        attrsQuoteCache[name] = quote;
         if (value) {
           attrsCache[name] = value
         } else {
@@ -248,7 +258,7 @@ function handleTemplate(code: string, rule: Rule): string {
 
         // 如果是自闭合标签
         if (isImplied) {
-          htmlString = htmlString.slice(0, htmlString.length - 2) + '/>'
+          htmlString = htmlString.slice(0, htmlString.length - 1) + '/>'
           return
         }
         htmlString += `</${tagName}>`
@@ -273,6 +283,7 @@ function handleTemplate(code: string, rule: Rule): string {
       decodeEntities: false,
     }
   )
+  console.log(code)
 
   parser.write(code)
   parser.end()
@@ -321,7 +332,7 @@ function handleScript(source: string, rule: Rule): string {
       functionName: rule.functionNameInScript,
     },
     isJsInVue: true, // 标记处理vue里的js
-    parse: initParse([[presetTypescript, { isTSX: true, allExtensions: true }]]),
+    parse: initParseSync([[presetTypescript, { isTSX: true, allExtensions: true }]])
   }
 
   if (startIndex !== -1) {
@@ -353,10 +364,12 @@ function mergeCode(
     style: string
   }
 ): string {
-  const sourceCode = tagOrder.reduce((code, tagName) => {
-    return code + tagMap[tagName]
-  }, '')
-  return sourceCode
+  
+  const sourceCodeArr = tagOrder.reduce((codeArr: string[], tagName) => {
+    codeArr.push(tagMap[tagName])
+    return codeArr
+  }, [])
+  return sourceCodeArr.join('\n')
 }
 
 function removeQuotes(value: string): string {

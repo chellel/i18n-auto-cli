@@ -6,11 +6,11 @@ import defaultConfig from '../default.config'
 import { getAbsolutePath } from './getAbsolutePath'
 import log from './log'
 
-function getUserConfig(configFile?: string): deepPartial<Config> {
+function getUserConfig(configFile: string = 'i18n.config.js'): deepPartial<Config> {
   if (configFile) {
     const configPath = getAbsolutePath(process.cwd(), configFile)
     if (!fs.existsSync(configPath)) {
-      log.warning('配置文件路径不存在，请重新设置指令参数 -c 或 --config-file 的值')
+      log.warning('配置文件路径不存在，请检查指令参数 -c 或 --config-file 的值。将使用默认配置')
       return {}
     } else {
       const config = require(configPath)

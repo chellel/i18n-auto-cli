@@ -25,6 +25,7 @@ import type { transformOptions } from '../types'
 import { types as t } from '@babel/core'
 import traverse from '@babel/traverse'
 import babelGenerator from '@babel/generator'
+import { parse as recastParse, print as recastPrint } from "recast";
 import template from '@babel/template'
 import isEmpty from 'lodash/isEmpty'
 import Collector from './collector'
@@ -151,7 +152,7 @@ function pushStatement(
   }
 }
 
-function transformJs(code: string, options: transformOptions): GeneratorResult {
+function transformJs(code: string, options: transformOptions): any {
   const { rule } = options
   const { caller, functionName, customizeKey, importDeclaration, functionSnippets, forceImport } =
     rule
@@ -184,11 +185,10 @@ function transformJs(code: string, options: transformOptions): GeneratorResult {
           getObjectExpression(params),
         ])
       }
-    } else {
-      // i18n标记没参数的情况
-      expression = getCallExpression(translationKey)
-      return template.expression(expression)()
     }
+    // i18n标记没参数的情况
+    expression = getCallExpression(translationKey)
+    return template.expression(expression)()
   }
 
   function transformAST(code: string, options: transformOptions) {
@@ -431,17 +431,23 @@ function transformJs(code: string, options: transformOptions): GeneratorResult {
         },
       }
     }
-
-    const ast = options.parse(code)
+    const ast = recastParse(code, {
+      parser: {
+        parse: options.parse
+      }
+    })
     traverse(ast, getTraverseOptions())
     return ast
   }
 
   const ast = transformAST(code, options)
-  const result = babelGenerator(ast, {
-    compact: false,
-    retainLines: true,
-  })
+  
+  //不使用babelGenerator，@babel/generator忽略了空格和换行，影响原代码格式
+  // const result = babelGenerator(ast, {
+  //   compact: false,
+  //   retainLines: true,
+  // })
+  const result = recastPrint(ast, { quote: null, reuseWhitespace: true, wrapColumn: 120 })
   // 文件里没有出现任何导入语句的情况
   if (!hasImportI18n && hasTransformed) {
     result.code = `${importDeclaration}\n${result.code}`
