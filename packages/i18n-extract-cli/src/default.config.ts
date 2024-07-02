@@ -18,7 +18,7 @@ function getCommonRule(): Rule {
 const config: Config = {
   input: 'src',
   output: '',
-  exclude: ['**/node_modules/**/*'],
+  exclude: ['**/node_modules/**/*', '**/src/assets/js/d_ts/**/*', '**/src/account/*'],
   rules: {
     js: getCommonRule(),
     ts: getCommonRule(),
@@ -42,17 +42,22 @@ const config: Config = {
     },
   },
   prettier: {
-    semi: false,
     singleQuote: true,
+    "printWidth": 120,
+    "semi": true,
+    "trailingComma": "es5",
+    "endOfLine": "lf",
+    "tabWidth": 2
   },
-  incremental: false,
+  incremental: true,
   skipExtract: false,
+  localeFile: './lang',
   localePath: './locales/zh-CN.json',
   localeFileType: 'json',
   excelPath: './locales.xlsx',
   exportExcel: false,
   skipTranslate: false,
-  locales: ['en-US'],
+  locales: ['en'],
   globalRule: {
     ignoreMethods: [],
   },

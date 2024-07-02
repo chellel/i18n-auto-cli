@@ -138,12 +138,12 @@ async function getTranslationConfig() {
       type: 'list',
       name: 'translator',
       message: '请选择翻译接口',
-      default: YOUDAO,
+      default: ALICLOUD,
       choices: [
+        { name: '阿里云机器翻译', value: ALICLOUD },
         { name: '有道翻译', value: YOUDAO },
         { name: '谷歌翻译', value: GOOGLE },
         { name: '百度翻译', value: BAIDU },
-        { name: '阿里云机器翻译', value: ALICLOUD },
       ],
       when(answers) {
         return !answers.skipTranslate
@@ -254,6 +254,17 @@ function formatCode(code: string, ext: string, prettierConfig: PrettierConfig): 
   return stylizedCode
 }
 
+function extractFileName(filePath: string) {
+  // Split the path by '/'
+  const parts = filePath.split('/');
+
+  // Find the index of 'lib'
+  const libIndex = parts.indexOf('lib');
+
+  // Return the next element after 'lib'
+  return parts[libIndex + 1]; 
+}
+
 export default async function (options: CommandOptions) {
   let i18nConfig = getI18nConfig(options)
   if (!i18nConfig.skipTranslate) {
@@ -268,6 +279,7 @@ export default async function (options: CommandOptions) {
     exclude,
     output,
     rules,
+    localeFile,
     localePath,
     locales,
     skipExtract,
@@ -275,27 +287,31 @@ export default async function (options: CommandOptions) {
     adjustKeyMap,
     localeFileType,
   } = i18nConfig
-  log.debug(`命令行配置信息:`, i18nConfig)
 
   let oldPrimaryLang: Record<string, string> = {}
-  const primaryLangPath = getAbsolutePath(process.cwd(), localePath)
-  if (!fs.existsSync(primaryLangPath)) {
-    fs.ensureFileSync(primaryLangPath)
-  }
-  oldPrimaryLang = getLang(primaryLangPath)
+  
   if (!skipExtract) {
-    log.info('正在转换中文，请稍等...')
-
+    log.info('正在提取中文，请耐心等待...')
     const sourceFilePaths = getSourceFilePaths(input, exclude)
+
+    
     const bar = new cliProgress.SingleBar(
       {
-        format: `${chalk.cyan('提取进度:')} [{bar}] {percentage}% {value}/{total}`,
+        format: `${chalk.cyan('当前提取进度:')} [{bar}] {percentage}% {value}/{total}`,
       },
       cliProgress.Presets.shades_classic
     )
     const startTime = new Date().getTime()
     bar.start(sourceFilePaths.length, 0)
     sourceFilePaths.forEach((sourceFilePath) => {
+      const module = extractFileName(sourceFilePath)
+      const primaryLangPath = getAbsolutePath(process.cwd(), localePath)
+      if (!fs.existsSync(primaryLangPath)) {
+        fs.ensureFileSync(primaryLangPath)
+      }
+      oldPrimaryLang = getLang(primaryLangPath)
+
+
       log.verbose(`正在提取文件中的中文:`, sourceFilePath)
       const sourceCode = fs.readFileSync(sourceFilePath, 'utf8')
       const ext = path.extname(sourceFilePath).replace('.', '') as FileExtension
@@ -325,11 +341,9 @@ export default async function (options: CommandOptions) {
 
       bar.increment()
     })
-    // 增量转换时，保留之前的提取的中文结果
-    if (i18nConfig.incremental) {
-      const newkeyMap = merge(oldPrimaryLang, Collector.getKeyMap())
-      Collector.setKeyMap(newkeyMap)
-    }
+    // 增量转换，保留之前的提取的中文结果
+    const newkeyMap = merge(oldPrimaryLang, Collector.getKeyMap())
+    Collector.setKeyMap(newkeyMap)
 
     const extName = path.extname(localePath)
     const savePath = localePath.replace(extName, `.${localeFileType}`)
